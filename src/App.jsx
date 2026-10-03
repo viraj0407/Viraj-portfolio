@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   BarChart3,
   BrainCircuit,
@@ -36,6 +37,8 @@ const PROFILE = {
   github: "https://github.com/viraj0407",
   linkedin: "https://www.linkedin.com/in/viraj-chavan-ba8401327/",
 };
+
+const hasLink = (url) => Boolean(url) && url !== "#";
 
 const skills = {
   Programming: ["Python", "SQL", "JavaScript", "HTML", "CSS"],
@@ -73,6 +76,7 @@ const skills = {
 const projects = [
   {
     id: "mindwell",
+    number: "01",
     title: "MindWell AI – Student Wellbeing Score Predictor",
     role: "Machine Learning Developer",
     category: ["Machine Learning", "AI"],
@@ -118,6 +122,7 @@ const projects = [
   },
   {
     id: "hospital",
+    number: "02",
     title: "Indian Hospital Analysis",
     role: "Data Scientist",
     category: ["Data Science", "Machine Learning"],
@@ -145,6 +150,7 @@ const projects = [
   },
   {
     id: "movies",
+    number: "03",
     title: "Movie Recommender System",
     role: "Machine Learning Developer",
     category: ["Machine Learning", "AI"],
@@ -169,6 +175,7 @@ const projects = [
   },
   {
     id: "airline",
+    number: "04",
     title: "Airline Performance Analytics Dashboard",
     role: "Data Analyst",
     category: ["Data Analytics"],
@@ -361,7 +368,7 @@ function About() {
             ["MSc", "Mathematics & Data Science"],
             ["8.18", "CGPA — BSc Computer Science"],
             ["4+", "Data / ML Projects"],
-            ["ML + Analytics", "AI"],
+            ["AI", "ML & Analytics Focus"],
           ].map(([value, label]) => (
             <div className="stat-card" key={label}>
               <strong>{value}</strong>
@@ -450,11 +457,19 @@ function Experience() {
 }
 
 function ProjectCard({ project, onDetails }) {
+  // Cards are re-mounted when the filter changes, after the page-level observer has run,
+  // so they handle their own reveal (otherwise they stay at opacity: 0).
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   return (
-    <article className={`project-card ${project.featured ? "featured" : ""} reveal`}>
+    <article className={`project-card${project.featured ? " featured" : ""} reveal${visible ? " visible" : ""}`}>
       <div className="project-card-top">
         <div className="project-role">{project.role}</div>
-        <div className="project-number">{project.id === "mindwell" ? "01" : project.id === "hospital" ? "02" : project.id === "movies" ? "03" : "04"}</div>
+        <div className="project-number">{project.number}</div>
       </div>
       <h3>{project.title}</h3>
       <p>{project.description}</p>
@@ -468,18 +483,34 @@ function ProjectCard({ project, onDetails }) {
         <button className="text-button" onClick={() => onDetails(project)}>
           View case study <ChevronRight size={16} />
         </button>
-        {project.links.github !== "#" && <a href={project.links.github} target="_blank" rel="noreferrer">GitHub <ExternalLink size={14} /></a>}
+        {hasLink(project.links?.github) && <a href={project.links.github} target="_blank" rel="noreferrer">GitHub <ExternalLink size={14} /></a>}
       </div>
     </article>
   );
 }
 
 function ProjectModal({ project, onClose }) {
+  const closeRef = useRef(null);
+
+  useEffect(() => {
+    if (!project) return undefined;
+    const onKey = (e) => e.key === "Escape" && onClose();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [project, onClose]);
+
   if (!project) return null;
+  const { github, demo } = project.links || {};
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={project.title} onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" aria-label="Close project details" onClick={onClose}><X size={20} /></button>
+        <button ref={closeRef} className="modal-close" aria-label="Close project details" onClick={onClose}><X size={20} /></button>
         <span className="eyebrow">{project.role}</span>
         <h2>{project.title}</h2>
         <p className="modal-description">{project.description}</p>
@@ -499,10 +530,12 @@ function ProjectModal({ project, onClose }) {
             </div>
           </>
         )}
-        <div className="modal-actions">
-          {project.links.github === "#" ? <span className="link-note">GitHub link placeholder — add the project URL in App.jsx.</span> : <a className="button secondary" href={project.links.github} target="_blank" rel="noreferrer"><Github size={16}/> GitHub</a>}
-          {project.links.demo === "#" ? <span className="link-note">Demo link placeholder — add the live URL in App.jsx.</span> : <a className="button primary" href={project.links.demo} target="_blank" rel="noreferrer"><ExternalLink size={16}/> Live Demo</a>}
-        </div>
+        {(hasLink(github) || hasLink(demo)) && (
+          <div className="modal-actions">
+            {hasLink(github) && <a className="button secondary" href={github} target="_blank" rel="noreferrer"><Github size={16} /> GitHub</a>}
+            {hasLink(demo) && <a className="button primary" href={demo} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Live Demo</a>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -512,6 +545,7 @@ function Projects() {
   const [filter, setFilter] = useState("All");
   const [selected, setSelected] = useState(null);
   const categories = ["All", "Machine Learning", "Data Science", "Data Analytics", "AI"];
+  const closeModal = useCallback(() => setSelected(null), []);
   const filtered = useMemo(
     () => filter === "All" ? projects : projects.filter((p) => p.category.includes(filter)),
     [filter]
@@ -524,14 +558,13 @@ function Projects() {
         title="Projects that show the full analytical workflow."
         text="From exploratory analysis to model optimization and deployed applications."
       />
-      <div className="filters" role="tablist" aria-label="Project filters">
+      <div className="filters" role="group" aria-label="Project filters">
         {categories.map((category) => (
           <button
             key={category}
             className={filter === category ? "active" : ""}
             onClick={() => setFilter(category)}
-            role="tab"
-            aria-selected={filter === category}
+            aria-pressed={filter === category}
           >
             {category}
           </button>
@@ -540,7 +573,7 @@ function Projects() {
       <div className="project-grid">
         {filtered.map((project) => <ProjectCard key={project.id} project={project} onDetails={setSelected} />)}
       </div>
-      <ProjectModal project={selected} onClose={() => setSelected(null)} />
+      <ProjectModal project={selected} onClose={closeModal} />
     </section>
   );
 }
@@ -643,6 +676,12 @@ function Contact() {
 
   function handleSubmit(e) {
     e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    const subject = `Portfolio enquiry from ${data.get("name")}`;
+    const body = `${data.get("message")}\n\n— ${data.get("name")} (${data.get("email")})`;
+    window.location.href = `mailto:${PROFILE.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    form.reset();
     setSent(true);
   }
 
@@ -670,8 +709,8 @@ function Contact() {
           <label>Name<input required name="name" placeholder="Your name" /></label>
           <label>Email<input required type="email" name="email" placeholder="you@company.com" /></label>
           <label>Message<textarea required name="message" rows="5" placeholder="Tell me what you'd like to discuss..." /></label>
-          <button className="button primary" type="submit"><Send size={16} /> {sent ? "Message ready" : "Send Message"}</button>
-          {sent && <p className="form-note"><CheckCircle2 size={16} /> Form UI is ready. Connect it to your preferred email/API service before production.</p>}
+          <button className="button primary" type="submit"><Send size={16} /> {sent ? "Opened in email app" : "Send Message"}</button>
+          {sent && <p className="form-note"><CheckCircle2 size={16} /> Your email app should open with the message ready to send. If nothing opened, email me directly at the address above.</p>}
         </form>
       </div>
     </section>
@@ -691,7 +730,13 @@ function Footer() {
 export default function App() {
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => entries.forEach((entry) => entry.isIntersecting && entry.target.classList.add("visible")),
+      (entries) =>
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        }),
       { threshold: 0.12 }
     );
     document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
